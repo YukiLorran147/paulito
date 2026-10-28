@@ -50,14 +50,17 @@ def register_ecommerce_routes(app):
         q = request.args.get("q", "").strip().casefold()
         category = request.args.get("category", "").strip()
         sort = request.args.get("sort", "featured")
+
         if sort not in {"featured", "price-asc", "price-desc", "name-asc"}:
             return jsonify(error={"code": "INVALID_SORT", "message": "Ordenação inválida."}), 400
 
-        items = [
-            p for p in PRODUCTS
-            if (not q or q in f'{p["name"]} {p["description"]} {p["category"]}'.casefold())
-            and (not category or p["category"] == category)
-        ]
+        items = []
+        for p in PRODUCTS:
+            match_q = (not q or q in f'{p["name"]} {p["description"]} {p["category"]}'.casefold())
+            match_cat = (not category or p["category"].casefold() == category.casefold())
+            if match_q and match_cat:
+                items.append(p)
+
         if sort == "price-asc":
             items.sort(key=lambda p: p["price"])
         elif sort == "price-desc":

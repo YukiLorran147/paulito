@@ -1,0 +1,462 @@
+\
+// Camada didática sobre a NEXORA. Não modifica comportamento da loja.
+// Intercepta fetch para log, mas devolve a mesma Response.
+(function () {
+  'use strict';
+
+  const STATE = {
+    open: false,
+    tab: 'investigar',
+    networkLog: [],
+    missionCart: [],
+    serverProducts: [],
+  };
+
+  // ── Fetch interceptor (transparente) ──────────────────────
+  const originalFetch = window.fetch;
+  window.fetch = async function (...args) {
+    const [input, init] = args;
+    const url = typeof input === 'string' ? input : input.url;
+    const method = (init?.method ||
+      (typeof input === 'object' && input.method) || 'GET').toUpperCase();
+    const startedAt = performance.now();
+    const entry = {
+      method, url, status: null, duration: 0,
+      responseBody: null, requestBody: init?.body || null, error: null,
+    };
+    try {
+      const res = await originalFetch.apply(this, args);
+      entry.status = res.status;
+      entry.duration = performance.now() - startedAt;
+      try { entry.responseBody = await res.clone().json(); }
+      catch {
+        try { entry.responseBody = await res.clone().text(); } catch {}
+      }
+      STATE.networkLog.push(entry);
+      if (STATE.networkLog.length > 50) STATE.networkLog.shift();
+      renderNetworkLog();
+      return res;
+    } catch (e) {
+      entry.error = e.message;
+      entry.duration = performance.now() - startedAt;
+      STATE.networkLog.push(entry);
+      renderNetworkLog();
+      throw e;
+    }
+  };
+
+  // ── FAB + painel ──────────────────────────────────────────
+  function createFAB() {
+    if (document.getElementById('mission-fab')) return;
+    const btn = document.createElement('button');
+    btn.id = 'mission-fab';
+    btn.className = 'mission-fab';
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Abrir modo missão 03');
+    btn.innerHTML = '<span aria-hidden="true">🎓</span><span class="fab-label">Modo missão</span>';
+    btn.addEventListener('click', openPanel);
+    document.body.appendChild(btn);
+  }
+
+  function createPanel() {
+    if (document.getElementById('mission-panel')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'mission-overlay';
+    overlay.className = 'mission-overlay';
+    overlay.addEventListener('click', closePanel);
+
+    const panel = document.createElement('aside');
+    panel.id = 'mission-panel';
+    panel.className = 'mission-panel';
+    panel.setAttribute('role', 'complementary');
+    panel.setAttribute('aria-label', 'Modo missão 03');
+    panel.setAttribute('aria-hidden', 'true');
+    panel.innerHTML = `
+      <div class="mission-panel-head">
+        <div>
+          <p class="mission-eyebrow">🎓 Missão 03</p>
+          <h2>Investigar a NEXORA</h2>
+        </div>
+        <button class="mission-close" type="button" aria-label="Fechar modo missão">×</button>
+      </div>
+      <div class="mission-tabs" role="tablist">
+        <button role="tab" data-tab="investigar" aria-selected="true">03.1 Investigar</button>
+        <button role="tab" data-tab="diagnosticar" aria-selected="false">03.2 Diagnosticar</button>
+        <button role="tab" data-tab="implementar" aria-selected="false">03.3 Implementar</button>
+        <button role="tab" data-tab="comprovar" aria-selected="false">03.4 Comprovar</button>
+      </div>
+      <div class="mission-tab-content" id="mission-content"></div>
+      <div class="mission-footer">
+        <a href="#catalogo" class="mission-link" id="mission-back">Voltar à loja</a>
+        <span class="mission-hint">A loja continua funcionando normalmente.</span>
+      </div>
+    `;
+    panel.querySelector('.mission-close').addEventListener('click', closePanel);
+    panel.querySelectorAll('[role="tab"]').forEach(t => {
+      t.addEventListener('click', () => switchTab(t.dataset.tab));
+    });
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(panel);
+    document.getElementById('mission-back')?.addEventListener('click', closePanel);
+  }
+
+  function openPanel() {
+    STATE.open = true;
+    document.getElementById('mission-overlay')?.classList.add('show');
+    const panel = document.getElementById('mission-panel');
+    if (panel) {
+      panel.setAttribute('aria-hidden', 'false');
+      panel.classList.add('show');
+    }
+    renderTab();
+    setTimeout(() => {
+      panel?.querySelector('[role="tab"][aria-selected="true"]')?.focus();
+    }, 250);
+  }
+
+  function closePanel() {
+    STATE.open = false;
+    document.getElementById('mission-overlay')?.classList.remove('show');
+    const panel = document.getElementById('mission-panel');
+    if (panel) {
+      panel.setAttribute('aria-hidden', 'true');
+      panel.classList.remove('show');
+    }
+    document.getElementById('mission-fab')?.focus();
+  }
+
+  function switchTab(name) {
+    STATE.tab = name;
+    document.querySelectorAll('[role="tab"]').forEach(t => {
+      t.setAttribute('aria-selected', t.dataset.tab === name ? 'true' : 'false');
+    });
+    renderTab();
+  }
+
+  // ── Render por aba ────────────────────────────────────────
+  function renderTab() {
+    const c = document.getElementById('mission-content');
+    if (!c) return;
+    ({
+      investigar: renderInvestigar,
+      diagnosticar: renderDiagnosticar,
+      implementar: renderImplementar,
+      comprovar: renderComprovar,
+    })[STATE.tab]?.(c);
+  }
+
+  function renderInvestigar(root) {
+    root.innerHTML = `
+      <div class="mission-section">
+        <p class="mission-lead">
+          Toda requisição que a loja faz aparece aqui em tempo real.
+          Mude os filtros ou recarregue a página — cada chamada fica registrada.
+        </p>
+        <div class="mission-actions">
+          <button type="button" data-action="fire">GET /api/shop/products</button>
+          <button type="button" data-action="clear">Limpar log</button>
+        </div>
+        <h3 class="mission-h3">Log de rede (${STATE.networkLog.length})</h3>
+        <div id="mission-network-log" class="mission-network-log"></div>
+      </div>
+    `;
+    root.querySelector('[data-action="fire"]')?.addEventListener('click', () => fetch('/api/shop/products'));
+    root.querySelector('[data-action="clear"]')?.addEventListener('click', () => {
+      STATE.networkLog = [];
+      renderInvestigar(root);
+    });
+    renderNetworkLog();
+  }
+
+  function renderNetworkLog() {
+    const box = document.getElementById('mission-network-log');
+    if (!box) return;
+    if (!STATE.networkLog.length) {
+      box.innerHTML = '<p class="mission-muted">Nenhuma requisição ainda.</p>';
+      return;
+    }
+    box.innerHTML = STATE.networkLog.slice().reverse().map(e => {
+      const cls = e.error ? 'err' : e.status < 400 ? 'ok' : 'warn';
+      const summary = e.error
+        ? 'erro de rede'
+        : `HTTP ${e.status} · ${Math.round(e.duration)}ms`;
+      return `
+        <details class="mission-req ${cls}">
+          <summary>
+            <span class="req-method">${esc(e.method)}</span>
+            <span class="req-url">${esc(e.url)}</span>
+            <span class="req-status">${summary}</span>
+          </summary>
+          <div class="req-body">
+            ${e.requestBody ? `<p class="mission-small"><strong>Enviado:</strong></p><pre>${esc(pretty(e.requestBody))}</pre>` : ''}
+            ${e.responseBody !== null ? `<p class="mission-small"><strong>Recebido:</strong></p><pre>${esc(pretty(e.responseBody))}</pre>` : ''}
+          </div>
+        </details>`;
+    }).join('');
+  }
+
+  function renderDiagnosticar(root) {
+    root.innerHTML = `
+      <div class="mission-section">
+        <p class="mission-lead">
+          Uma resposta HTTP de erro <strong>não é falha de conexão</strong>.
+          O servidor respondeu — com um status que indica o problema.
+        </p>
+        <div class="mission-actions">
+          <button type="button" data-diag="sort">?sort=banana → esperado 400</button>
+          <button type="button" data-diag="404">/products/9999 → esperado 404</button>
+        </div>
+        <div id="mission-diag-out" class="mission-output">
+          <p class="mission-muted">Escolha um teste acima.</p>
+        </div>
+      </div>
+    `;
+    root.querySelectorAll('[data-diag]').forEach(b =>
+      b.addEventListener('click', () => runDiagnostic(b.dataset.diag)));
+  }
+
+  async function runDiagnostic(kind) {
+    const out = document.getElementById('mission-diag-out');
+    if (!out) return;
+    out.innerHTML = '<p class="mission-muted">Consultando...</p>';
+    const url = kind === 'sort'
+      ? '/api/shop/products?sort=banana'
+      : '/api/shop/products/9999';
+    try {
+      const res = await fetch(url);
+      const body = await res.json();
+      out.innerHTML = `
+        <div class="mission-req-result ${res.ok ? 'ok' : 'warn'}">
+          <p><strong>GET ${esc(url)}</strong></p>
+          <p>Status: <strong>HTTP ${res.status}</strong></p>
+          <details><summary>Ver corpo</summary>
+            <pre>${esc(JSON.stringify(body, null, 2))}</pre>
+          </details>
+        </div>`;
+    } catch (e) {
+      out.innerHTML = `<p class="mission-error">Erro: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderImplementar(root) {
+    root.innerHTML = `
+      <div class="mission-section">
+        <p class="mission-lead">
+          O cliente envia <strong>apenas <code>{id, quantity}</code></strong>.
+          O <strong>servidor</strong> consulta o preço oficial e calcula o total.
+        </p>
+        <div class="mission-cart-builder">
+          <label>Produto<select id="mission-product"><option value="">Carregando...</option></select></label>
+          <label>Qtd<input id="mission-qty" type="number" min="1" value="1"></label>
+          <button type="button" id="mission-add" class="mission-button primary">Adicionar</button>
+        </div>
+        <h3 class="mission-h3">Carrinho da missão (${STATE.missionCart.length})</h3>
+        <div id="mission-cart-list" class="mission-cart-list"></div>
+        <div class="mission-actions">
+          <button type="button" id="mission-validate" class="mission-button primary">Validar no servidor →</button>
+          <button type="button" id="mission-clear">Limpar</button>
+        </div>
+        <div id="mission-validate-out" class="mission-output">
+          <p class="mission-muted">Adicione itens e valide.</p>
+        </div>
+      </div>
+    `;
+    loadProductsForSelect();
+    renderMissionCart();
+    document.getElementById('mission-add')?.addEventListener('click', addToMissionCart);
+    document.getElementById('mission-clear')?.addEventListener('click', () => {
+      STATE.missionCart = [];
+      renderMissionCart();
+      const out = document.getElementById('mission-validate-out');
+      if (out) out.innerHTML = '<p class="mission-muted">Carrinho limpo.</p>';
+    });
+    document.getElementById('mission-validate')?.addEventListener('click', validateMissionCart);
+  }
+
+  async function loadProductsForSelect() {
+    const sel = document.getElementById('mission-product');
+    if (!sel) return;
+    try {
+      const res = await fetch('/api/shop/products');
+      const data = await res.json();
+      STATE.serverProducts = data.items || [];
+      sel.innerHTML = '<option value="">Escolha...</option>' +
+        STATE.serverProducts.map(p =>
+          `<option value="${p.id}">${p.id} · ${esc(p.name)} · R$ ${p.price.toFixed(2)}</option>`
+        ).join('');
+    } catch {
+      sel.innerHTML = '<option value="">Erro ao carregar</option>';
+    }
+  }
+
+  function addToMissionCart() {
+    const sel = document.getElementById('mission-product');
+    const qty = Number(document.getElementById('mission-qty')?.value);
+    if (!sel?.value || qty < 1) return;
+    const existing = STATE.missionCart.find(i => i.id === Number(sel.value));
+    if (existing) existing.quantity += qty;
+    else STATE.missionCart.push({ id: Number(sel.value), quantity: qty });
+    renderMissionCart();
+  }
+
+  function renderMissionCart() {
+    const list = document.getElementById('mission-cart-list');
+    if (!list) return;
+    if (!STATE.missionCart.length) {
+      list.innerHTML = '<p class="mission-muted">Nenhum item.</p>';
+      return;
+    }
+    list.innerHTML = STATE.missionCart.map((item, idx) => {
+      const prod = STATE.serverProducts.find(p => p.id === item.id);
+      return `<div class="mission-cart-item">
+        <span>${esc(prod?.name || 'id ' + item.id)} × ${item.quantity}</span>
+        <button type="button" data-rm="${idx}" aria-label="Remover">×</button>
+      </div>`;
+    }).join('');
+    list.querySelectorAll('[data-rm]').forEach(b =>
+      b.addEventListener('click', () => {
+        STATE.missionCart.splice(Number(b.dataset.rm), 1);
+        renderMissionCart();
+      }));
+  }
+
+  async function validateMissionCart() {
+    const out = document.getElementById('mission-validate-out');
+    if (!out) return;
+    if (!STATE.missionCart.length) {
+      out.innerHTML = '<p class="mission-warn">Adicione ao menos um item.</p>';
+      return;
+    }
+    out.innerHTML = '<p class="mission-muted">Enviando...</p>';
+    try {
+      const res = await fetch('/api/shop/cart/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: STATE.missionCart }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        out.innerHTML = `
+          <div class="mission-req-result warn">
+            <p><strong>HTTP ${res.status}</strong> · ${esc(body?.error?.code || '')}</p>
+            <p>${esc(body?.error?.message || '')}</p>
+            <details><summary>Ver corpo</summary>
+              <pre>${esc(JSON.stringify(body, null, 2))}</pre>
+            </details>
+          </div>`;
+        return;
+      }
+      out.innerHTML = `
+        <div class="mission-req-result ok">
+          <p><strong>✓ ${esc(body.message)}</strong></p>
+          <p>Total oficial: <strong>R$ ${Number(body.total).toFixed(2)}</strong></p>
+          <details><summary>Ver resposta</summary>
+            <pre>${esc(JSON.stringify(body, null, 2))}</pre>
+          </details>
+        </div>`;
+    } catch (e) {
+      out.innerHTML = `<p class="mission-error">Erro: ${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderComprovar(root) {
+    root.innerHTML = `
+      <div class="mission-section">
+        <p class="mission-lead">
+          Tente enganar o servidor. Todos estes ataques devem ser
+          <strong>corrigidos ou recusados</strong> pelo backend.
+        </p>
+        <div class="mission-actions">
+          <button type="button" data-atk="price">Mentir o preço (R$ 0,01)</button>
+          <button type="button" data-atk="stock">999 monitores (estoque 5)</button>
+          <button type="button" data-atk="unknown">id 9999 (não existe)</button>
+        </div>
+        <div id="mission-attack-out" class="mission-output">
+          <p class="mission-muted">Escolha um ataque.</p>
+        </div>
+      </div>
+    `;
+    root.querySelectorAll('[data-atk]').forEach(b =>
+      b.addEventListener('click', () => runAttack(b.dataset.atk)));
+  }
+
+  async function runAttack(kind) {
+    const out = document.getElementById('mission-attack-out');
+    if (!out) return;
+    const payloads = {
+      price: { items: [{ id: 101, quantity: 2, price: 0.01 }] },
+      stock: { items: [{ id: 104, quantity: 999 }] },
+      unknown: { items: [{ id: 9999, quantity: 1 }] },
+    };
+    out.innerHTML = '<p class="mission-muted">Enviando...</p>';
+    try {
+      const res = await fetch('/api/shop/cart/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloads[kind]),
+      });
+      const body = await res.json();
+
+      if (res.ok && kind === 'price') {
+        out.innerHTML = `
+          <div class="mission-req-result ok">
+            <p><strong>✓ Servidor ignorou o preço mentiroso.</strong></p>
+            <p>Cliente enviou R$ 0,01 × 2 = R$ 0,02.</p>
+            <p>Servidor calculou: <strong>R$ ${Number(body.total).toFixed(2)}</strong>.</p>
+            <details><summary>Ver resposta</summary>
+              <pre>${esc(JSON.stringify(body, null, 2))}</pre>
+            </details>
+          </div>`;
+        return;
+      }
+      if (!res.ok) {
+        out.innerHTML = `
+          <div class="mission-req-result warn">
+            <p><strong>✓ Servidor recusou.</strong></p>
+            <p><strong>HTTP ${res.status}</strong> ·
+              ${esc(body?.error?.code || '')} ·
+              ${esc(body?.error?.message || '')}</p>
+            <details><summary>Ver resposta</summary>
+              <pre>${esc(JSON.stringify(body, null, 2))}</pre>
+            </details>
+          </div>`;
+        return;
+      }
+      out.innerHTML = `<pre>${esc(JSON.stringify(body, null, 2))}</pre>`;
+    } catch (e) {
+      out.innerHTML = `<p class="mission-error">Erro: ${esc(e.message)}</p>`;
+    }
+  }
+
+  // ── Util ──────────────────────────────────────────────────
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+  function pretty(v) {
+    if (typeof v === 'string') {
+      try { return JSON.stringify(JSON.parse(v), null, 2); }
+      catch { return v; }
+    }
+    return JSON.stringify(v, null, 2);
+  }
+
+  // ── Boot ──────────────────────────────────────────────────
+  function init() {
+    createFAB();
+    createPanel();
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && STATE.open) closePanel();
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();

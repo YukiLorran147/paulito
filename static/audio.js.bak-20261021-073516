@@ -1,0 +1,32 @@
+let ctx = null, gain = null;
+export function initAudio() {
+  const boot = () => {
+    if (ctx) return;
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    gain = ctx.createGain(); gain.gain.value = .1; gain.connect(ctx.destination);
+  };
+  ["click","keydown","touchstart"].forEach(e =>
+    document.addEventListener(e, boot, { once: true, passive: true }));
+}
+function tone(f, dur, type="sine", delay=0, vol=.3) {
+  if (!ctx || !gain) return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.value = f;
+  o.connect(g); g.connect(gain);
+  const t = ctx.currentTime + delay;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + .02);
+  g.gain.exponentialRampToValueAtTime(.001, t + dur);
+  o.start(t); o.stop(t + dur + .05);
+}
+export function playSuccess() {
+  [523,659,784,1046].forEach((f,i) => tone(f, .15, "sine", i*.08, .25));
+}
+export function playError() {
+  tone(160, .3, "sawtooth", 0, .2);
+  tone(140, .3, "sawtooth", .05, .2);
+}
+export function playChime() {
+  tone(880, .12, "sine", 0, .2);
+  tone(1174, .35, "sine", .1, .2);
+}

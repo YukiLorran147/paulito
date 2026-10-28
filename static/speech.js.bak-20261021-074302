@@ -1,0 +1,89 @@
+// Web Speech API — narração pt-BR.
+// Corrigido: detecta ausência de vozes e avisa.
+
+let enabled = false;
+let voice = null;
+let voicesLoaded = false;
+
+export function initSpeech() {
+  console.log('[speech] initSpeech() executado');
+
+  if (!window.speechSynthesis) {
+    console.warn('[speech] speechSynthesis indisponível');
+    const t = document.getElementById('speech-toggle');
+    if (t) { t.disabled = true; t.textContent = 'Narrador (indisponível)'; }
+    window.__dsSpeech = {
+      get enabled() { return false; },
+      get voicesCount() { return 0; },
+      get voicesPtBr() { return []; },
+      test: () => console.warn('[speech] indisponível'),
+      speak: () => {},
+    };
+    return;
+  }
+
+  function pick() {
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) { voicesLoaded = false; return; }
+    voicesLoaded = true;
+    voice = voices.find(v => v.lang === 'pt-BR')
+         || voices.find(v => v.lang.startsWith('pt'))
+         || null;
+    console.log('[speech] vozes:', voices.length,
+                '| pt-BR:', !!voice, '| voz:', voice?.name || '(default)');
+  }
+
+  pick();
+  window.speechSynthesis.addEventListener('voiceschanged', pick);
+
+  window.__dsSpeech = {
+    get enabled() { return enabled; },
+    get voicesCount() { return window.speechSynthesis.getVoices().length; },
+    get voicesPtBr() {
+      return window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('pt'));
+    },
+    test: () => {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('Teste de narração em português.');
+      u.lang = 'pt-BR';
+      if (voice) u.voice = voice;
+      window.speechSynthesis.speak(u);
+    },
+    speak: (t) => { enabled = true; speak(t); },
+  };
+
+  const toggle = document.getElementById('speech-toggle');
+  if (!toggle) return;
+
+  toggle.addEventListener('click', () => {
+    enabled = !enabled;
+    toggle.classList.toggle('on', enabled);
+    toggle.setAttribute('aria-pressed', String(enabled));
+
+    if (enabled) {
+      if (!voicesLoaded || window.speechSynthesis.getVoices().length === 0) {
+        const live = document.getElementById('sr-live');
+        if (live) live.textContent =
+          'Narração ativada, mas sem vozes instaladas. No Linux: ' +
+          'sudo apt install speech-dispatcher espeak-ng';
+        toggle.textContent = 'Narrador (sem voz)';
+        return;
+      }
+      speak('Narração ativada.');
+    } else {
+      window.speechSynthesis.cancel();
+    }
+  });
+
+  console.log('[speech] __dsSpeech disponível');
+}
+
+export function speak(text) {
+  if (!enabled || !window.speechSynthesis || !text) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'pt-BR';
+  u.rate = 1.05;
+  if (voice) u.voice = voice;
+  window.speechSynthesis.speak(u);
+}

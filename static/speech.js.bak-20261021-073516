@@ -1,0 +1,26 @@
+let enabled = false, voice = null;
+function pick() {
+  if (!window.speechSynthesis) return;
+  const v = window.speechSynthesis.getVoices();
+  voice = v.find(x => x.lang === "pt-BR") || v.find(x => x.lang.startsWith("pt"));
+}
+export function initSpeech() {
+  const btn = document.getElementById("speech-toggle");
+  if (!btn || !window.speechSynthesis) { if (btn) btn.disabled = true; return; }
+  pick(); window.speechSynthesis.addEventListener("voiceschanged", pick);
+  btn.addEventListener("click", () => {
+    enabled = !enabled;
+    btn.classList.toggle("on", enabled);
+    btn.setAttribute("aria-pressed", String(enabled));
+    if (enabled) speak("Narração ativada.");
+    else window.speechSynthesis.cancel();
+  });
+}
+export function speak(text) {
+  if (!enabled || !window.speechSynthesis || !text) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "pt-BR"; u.rate = 1.05;
+  if (voice) u.voice = voice;
+  window.speechSynthesis.speak(u);
+}

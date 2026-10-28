@@ -1,0 +1,194 @@
+
+/* Camada didática. Não interfere no CSS existente da NEXORA. */
+
+.mission-fab {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9000;
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 18px;
+  background: #fafafa; color: #101114;
+  border: 1px solid #d4d4d8; border-radius: 99px;
+  font: 600 13px/1 system-ui, sans-serif; cursor: pointer;
+  box-shadow: 0 8px 32px rgba(0,0,0,.18);
+  transition: transform .2s, box-shadow .2s;
+}
+.mission-fab:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,.24); }
+.mission-fab:focus-visible { outline: 3px solid #101114; outline-offset: 3px; }
+.mission-fab span[aria-hidden="true"] { font-size: 16px; }
+
+.mission-overlay {
+  position: fixed; inset: 0; z-index: 9100;
+  background: rgba(16,17,20,.35); backdrop-filter: blur(2px);
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+.mission-overlay.show { opacity: 1; pointer-events: auto; }
+
+.mission-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 9200;
+  width: min(560px, 100vw);
+  background: #fafafa; color: #101114;
+  display: flex; flex-direction: column;
+  box-shadow: -12px 0 48px rgba(0,0,0,.18);
+  transform: translateX(100%);
+  transition: transform .3s cubic-bezier(.4, 0, .2, 1);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.mission-panel.show { transform: translateX(0); }
+
+.mission-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 22px; border-bottom: 1px solid #e4e4e7;
+}
+.mission-eyebrow {
+  margin: 0 0 4px; font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; color: #71717a; font-weight: 700;
+}
+.mission-panel h2 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+.mission-close {
+  width: 36px; height: 36px; border: 1px solid #e4e4e7;
+  background: transparent; border-radius: 8px;
+  font-size: 20px; cursor: pointer; color: #52525b;
+}
+.mission-close:hover { background: #f4f4f5; }
+
+.mission-tabs {
+  display: flex; gap: 2px; padding: 0 12px;
+  border-bottom: 1px solid #e4e4e7; overflow-x: auto; flex-shrink: 0;
+}
+.mission-tabs [role="tab"] {
+  padding: 12px 14px; border: none; background: transparent;
+  color: #71717a; font: 600 12px/1 system-ui, sans-serif;
+  cursor: pointer; border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.mission-tabs [role="tab"]:hover { color: #101114; }
+.mission-tabs [role="tab"][aria-selected="true"] {
+  color: #101114; border-bottom-color: #101114;
+}
+
+.mission-tab-content { flex: 1; overflow-y: auto; padding: 22px; }
+.mission-lead { color: #52525b; font-size: 14px; line-height: 1.65; margin: 0 0 16px; }
+.mission-h3 {
+  margin: 24px 0 10px; font-size: 13px; letter-spacing: .08em;
+  text-transform: uppercase; color: #71717a; font-weight: 800;
+}
+.mission-muted { color: #a1a1aa; font-size: 13px; }
+.mission-small { font-size: 12px; color: #71717a; margin: 8px 0 4px; }
+.mission-error { color: #dc2626; font-size: 13px; }
+.mission-warn { color: #ca8a04; font-size: 13px; }
+
+.mission-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.mission-actions button, .mission-button, .mission-cart-builder button {
+  padding: 10px 16px;
+  border: 1px solid #d4d4d8; background: #fff;
+  border-radius: 8px; font: 600 13px/1 system-ui, sans-serif;
+  cursor: pointer; color: #101114;
+  transition: background .15s, border-color .15s;
+}
+.mission-actions button:hover, .mission-button:hover,
+.mission-cart-builder button:hover {
+  background: #f4f4f5; border-color: #a1a1aa;
+}
+.mission-button.primary, .mission-cart-builder button.primary {
+  background: #101114; color: #fafafa; border-color: #101114;
+}
+.mission-button.primary:hover { background: #27272a; }
+
+.mission-network-log {
+  max-height: 400px; overflow-y: auto;
+  border: 1px solid #e4e4e7; border-radius: 10px; background: #fff;
+}
+.mission-req {
+  border-bottom: 1px solid #f4f4f5;
+  font: 13px/1.4 ui-monospace, SFMono-Regular, monospace;
+}
+.mission-req:last-child { border-bottom: none; }
+.mission-req summary {
+  padding: 10px 12px; cursor: pointer;
+  display: flex; gap: 8px; align-items: center; font-weight: 500;
+}
+.mission-req summary:hover { background: #fafafa; }
+.req-method {
+  padding: 2px 6px; border-radius: 4px;
+  font-size: 10px; font-weight: 800; letter-spacing: .05em;
+  background: #e4e4e7;
+}
+.mission-req.ok .req-method { background: #d1fae5; color: #065f46; }
+.mission-req.warn .req-method { background: #fef3c7; color: #92400e; }
+.mission-req.err .req-method { background: #fee2e2; color: #991b1b; }
+.req-url {
+  flex: 1; font-size: 11px; color: #52525b;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.req-status { font-size: 11px; color: #71717a; white-space: nowrap; }
+.mission-req.ok .req-status { color: #059669; }
+.mission-req.warn .req-status { color: #ca8a04; }
+.mission-req.err .req-status { color: #dc2626; }
+.req-body { padding: 0 12px 12px; background: #fafafa; }
+.req-body pre {
+  margin: 4px 0; padding: 10px;
+  background: #101114; color: #fafafa; border-radius: 6px;
+  font-size: 11px; overflow: auto; max-height: 220px;
+}
+
+.mission-output {
+  margin-top: 12px; padding: 12px;
+  border: 1px solid #e4e4e7; border-radius: 10px; background: #fff;
+}
+.mission-req-result.ok { color: #065f46; }
+.mission-req-result.warn { color: #92400e; }
+.mission-req-result p { margin: 6px 0; font-size: 13px; }
+.mission-req-result pre {
+  margin: 6px 0 0; padding: 10px;
+  background: #101114; color: #fafafa; border-radius: 6px;
+  font-size: 11px; overflow: auto; max-height: 260px;
+}
+
+.mission-cart-builder {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
+  align-items: end; padding: 14px; background: #f4f4f5;
+  border-radius: 10px; margin-bottom: 12px;
+}
+.mission-cart-builder label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 12px; font-weight: 600; color: #52525b;
+}
+.mission-cart-builder select, .mission-cart-builder input {
+  padding: 8px 10px; border: 1px solid #d4d4d8; border-radius: 6px;
+  font: 13px system-ui, sans-serif; background: #fff; color: #101114;
+  min-width: 0;
+}
+
+.mission-cart-list {
+  border: 1px solid #e4e4e7; border-radius: 10px;
+  padding: 4px 12px; background: #fff; min-height: 60px;
+}
+.mission-cart-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; font-size: 13px; border-bottom: 1px solid #f4f4f5;
+}
+.mission-cart-item:last-child { border-bottom: none; }
+.mission-cart-item button {
+  width: 26px; height: 26px; border: 1px solid #d4d4d8;
+  background: transparent; border-radius: 6px;
+  cursor: pointer; color: #52525b; font-size: 14px;
+}
+.mission-cart-item button:hover {
+  background: #fee2e2; border-color: #fca5a5; color: #991b1b;
+}
+
+.mission-footer {
+  padding: 12px 22px; border-top: 1px solid #e4e4e7;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; color: #a1a1aa; background: #fafafa;
+  flex-shrink: 0;
+}
+.mission-link { color: #52525b; text-decoration: underline; }
+.mission-hint { font-style: italic; }
+
+@media (max-width: 600px) {
+  .mission-fab { bottom: 16px; right: 16px; padding: 10px 14px; font-size: 12px; }
+  .mission-fab .fab-label { display: none; }
+  .mission-cart-builder { grid-template-columns: 1fr 1fr; }
+  .mission-cart-builder button { grid-column: 1 / -1; }
+  .mission-footer { flex-direction: column; gap: 6px; text-align: center; }
+}

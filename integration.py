@@ -1,5 +1,4 @@
-# INTEGRAÇÃO — chamado por app.py via register_ecommerce_routes(app)
-from flask import render_template, jsonify, request
+from flask import render_template, jsonify, request, session
 
 PRODUCTS = [
     {"id": 101, "name": "Teclado mecânico Orion", "category": "Periféricos", "price": 249.90, "stock": 12,
@@ -34,8 +33,6 @@ def _find_product(pid: int):
 
 
 def register_ecommerce_routes(app):
-    """Chame uma vez com o app Flask existente: register_ecommerce_routes(app)."""
-
     @app.get("/ecommerce")
     def ecommerce_page():
         return render_template("ecommerce.html")
@@ -54,8 +51,7 @@ def register_ecommerce_routes(app):
         category = request.args.get("category", "").strip()
         sort = request.args.get("sort", "featured")
         if sort not in {"featured", "price-asc", "price-desc", "name-asc"}:
-            return jsonify(error={"code": "INVALID_SORT",
-                                  "message": "Ordenação inválida."}), 400
+            return jsonify(error={"code": "INVALID_SORT", "message": "Ordenação inválida."}), 400
 
         items = [
             p for p in PRODUCTS
@@ -73,56 +69,42 @@ def register_ecommerce_routes(app):
 
         public_items = [{k: v for k, v in p.items() if k != "featured"} for p in items]
         return jsonify(items=public_items, total=len(public_items),
-                       filters={"q": request.args.get("q", ""),
-                                "category": category, "sort": sort})
+                       filters={"q": request.args.get("q", ""), "category": category, "sort": sort})
 
     @app.get("/api/shop/products/<int:product_id>")
     def ecommerce_product_detail(product_id):
         product = _find_product(product_id)
         if product is None:
-            return jsonify(error={"code": "PRODUCT_NOT_FOUND",
-                                  "message": "Produto não encontrado."}), 404
+            return jsonify(error={"code": "PRODUCT_NOT_FOUND", "message": "Produto não encontrado."}), 404
         return jsonify({k: v for k, v in product.items() if k != "featured"})
 
-    # ────────────────────────────────────────────────────────
-    # CORAÇÃO DA MISSÃO 03 — o servidor é a autoridade.
-    # O cliente envia apenas {id, quantity}. QUALQUER campo
-    # de preço enviado é IGNORADO. Preço e estoque vêm do
-    # catálogo do servidor (PRODUCTS).
-    # ────────────────────────────────────────────────────────
     @app.post("/api/shop/cart/validate")
     def ecommerce_cart_validate():
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
-            return jsonify(error={"code": "INVALID_BODY",
-                                  "message": "Corpo deve ser um objeto JSON."}), 400
+            return jsonify(error={"code": "INVALID_BODY", "message": "Corpo deve ser um objeto JSON."}), 400
 
         items = payload.get("items")
         if not isinstance(items, list) or not items:
-            return jsonify(error={"code": "INVALID_ITEMS",
-                                  "message": "Envie items: [{id, quantity}, ...]."}), 400
+            return jsonify(error={"code": "INVALID_ITEMS", "message": "Envie items: [{id, quantity}, ...]."}), 400
 
         result_items, total = [], 0.0
 
         for raw in items:
             if not isinstance(raw, dict):
-                return jsonify(error={"code": "INVALID_ITEM",
-                                      "message": "Cada item deve ser um objeto."}), 400
+                return jsonify(error={"code": "INVALID_ITEM", "message": "Cada item deve ser um objeto."}), 400
 
             pid = raw.get("id")
             qty = raw.get("quantity")
 
             if not isinstance(pid, int):
-                return jsonify(error={"code": "INVALID_ID",
-                                      "message": f"id deve ser inteiro: {pid!r}."}), 400
+                return jsonify(error={"code": "INVALID_ID", "message": f"id deve ser inteiro: {pid!r}."}), 400
             if not isinstance(qty, int) or qty <= 0:
-                return jsonify(error={"code": "INVALID_QUANTITY",
-                                      "message": f"quantity deve ser inteiro > 0: {qty!r}."}), 400
+                return jsonify(error={"code": "INVALID_QUANTITY", "message": f"quantity deve ser inteiro > 0: {qty!r}."}), 400
 
             product = _find_product(pid)
             if product is None:
-                return jsonify(error={"code": "PRODUCT_NOT_FOUND",
-                                      "message": f"Produto {pid} não existe."}), 404
+                return jsonify(error={"code": "PRODUCT_NOT_FOUND", "message": f"Produto {pid} não existe."}), 404
 
             if qty > product["stock"]:
                 return jsonify(error={
@@ -132,7 +114,7 @@ def register_ecommerce_routes(app):
                     "requested": qty,
                 }), 409
 
-            unit = product["price"]                    # ← do servidor
+            unit = product["price"]
             subtotal = round(unit * qty, 2)
             result_items.append({
                 "id": product["id"],
@@ -150,3 +132,29 @@ def register_ecommerce_routes(app):
             "total": round(total, 2),
             "message": "Carrinho validado pelo servidor.",
         })
+
+    @app.get("/api/shop/wishlist")
+    def get_wishlist():
+        return jsonify(items=session.get("wishlist", []))
+
+    @app.post("/api/shop/wishlist")
+    def add_wishlist():
+        data = request.get_json(silent=True)
+        if not data or "id" not in data:
+            return jsonify(error={"code": "INVALID_BODY", "message": "Envie {id}."}), 400
+        pid = data.get("id")
+        if not any(p["id"] == pid for p in PRODUCTS):
+            return jsonify(error={"code": "PRODUCT_NOT_FOUND", "message": "Produto não encontrado."}), 404
+        wishlist = session.get("wishlist", [])
+        if pid not in wishlist:
+            wishlist.append(pid)
+            session["wishlist"] = wishlist
+        return jsonify(items=wishlist, message="Adicionado à lista de desejos.")
+
+    @app.delete("/api/shop/wishlist/<int:pid>")
+    def remove_wishlist(pid):
+        wishlist = session.get("wishlist", [])
+        if pid in wishlist:
+            wishlist.remove(pid)
+            session["wishlist"] = wishlist
+        return jsonify(items=wishlist, message="Removido da lista de desejos.")

@@ -7,10 +7,11 @@ const state = {
   query: '',
   category: '',
   sort: 'featured',
-  products: [],        // Catálogo completo para o carrinho
-  visibleProducts: [], // Produtos exibidos após os filtros
+  products: [],
+  visibleProducts: [],
   categories: [],
-  cart: readCart()
+  cart: readCart(),
+  wishlist: []
 };
 
 const $ = id => document.getElementById(id);
@@ -44,6 +45,12 @@ const money = value =>
     style: 'currency',
     currency: 'BRL'
   }).format(value);
+
+const heartSVG = (filled) => `
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+  </svg>
+`;
 
 async function getJSON(url, options = {}) {
   let response;
@@ -142,16 +149,42 @@ function productById(id) {
   return state.products.find(product => product.id === id);
 }
 
-/* Inicialização */
+async function toggleWishlist(id) {
+  const isInWishlist = state.wishlist.includes(id);
+  const method = isInWishlist ? 'DELETE' : 'POST';
+  const url = isInWishlist
+    ? `${API}/wishlist/${id}`
+    : `${API}/wishlist`;
+
+  try {
+    const data = await getJSON(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: method === 'POST' ? JSON.stringify({ id }) : null
+    });
+
+    state.wishlist = data.items || [];
+
+    document.querySelectorAll(`[data-wishlist-id="${id}"]`).forEach(btn => {
+      btn.innerHTML = heartSVG(state.wishlist.includes(id));
+      btn.classList.toggle('active', state.wishlist.includes(id));
+    });
+
+    toast(isInWishlist ? 'Removido da lista de desejos.' : 'Adicionado à lista de desejos!');
+  } catch (error) {
+    toast(`Erro na lista de desejos: ${error.message}`);
+  }
+}
 
 async function init() {
   ui.status.textContent = 'Conectando à API Flask…';
   ui.error.hidden = true;
 
   try {
-    const [catalog, categories] = await Promise.all([
+    const [catalog, categories, wishlistData] = await Promise.all([
       getJSON(`${API}/products?sort=featured`),
-      getJSON(`${API}/categories`)
+      getJSON(`${API}/categories`),
+      getJSON(`${API}/wishlist`)
     ]);
 
     if (!Array.isArray(catalog.items) ||
@@ -159,11 +192,10 @@ async function init() {
       throw new Error('Estrutura de dados inválida recebida da API.');
     }
 
-    // Preserva o catálogo completo, sem aplicar filtros aqui.
     state.products = catalog.items;
     state.categories = categories.items;
+    state.wishlist = wishlistData.items || [];
 
-    // Evita duplicar categorias ao tentar novamente.
     ui.category.replaceChildren(
       new Option('Todas as categorias', '')
     );
@@ -174,7 +206,6 @@ async function init() {
 
     ui.category.value = state.category;
 
-    // Sincroniza o carrinho com os produtos disponíveis.
     reconcileCart();
 
     await refresh();
@@ -205,8 +236,6 @@ function reconcileCart() {
   renderCart();
 }
 
-/* Catálogo e filtros */
-
 let refreshSequence = 0;
 
 async function refresh() {
@@ -232,7 +261,6 @@ async function refresh() {
       `${API}/products?${params.toString()}`
     );
 
-    // Ignora respostas antigas que chegaram fora de ordem.
     if (sequence !== refreshSequence) return;
 
     if (!Array.isArray(data.items) ||
@@ -240,7 +268,6 @@ async function refresh() {
       throw new Error('Resposta de catálogo inválida.');
     }
 
-    // Não sobrescreve state.products: ele contém o catálogo completo.
     state.visibleProducts = data.items;
 
     renderProducts(state.visibleProducts);
@@ -322,6 +349,18 @@ function renderProducts(products) {
 
     imageWrap.append(tag);
 
+    const wishBtn = document.createElement('button');
+    wishBtn.className = 'wishlist-btn';
+    wishBtn.type = 'button';
+    wishBtn.dataset.wishlistId = product.id;
+    wishBtn.innerHTML = heartSVG(state.wishlist.includes(product.id));
+    wishBtn.classList.toggle('active', state.wishlist.includes(product.id));
+    wishBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleWishlist(product.id);
+    });
+    imageWrap.append(wishBtn);
+
     const add = document.createElement('button');
     add.className = 'quick-add';
     add.type = 'button';
@@ -370,8 +409,6 @@ function renderProducts(products) {
   }
 }
 
-/* Detalhes do produto */
-
 async function detailsFor(id) {
   try {
     const product = await getJSON(`${API}/products/${id}`);
@@ -407,6 +444,14 @@ async function detailsFor(id) {
     price.className = 'dialog-price';
     price.textContent = money(product.price);
 
+    const wishBtn = document.createElement('button');
+    wishBtn.className = 'wishlist-btn-modal';
+    wishBtn.type = 'button';
+    wishBtn.dataset.wishlistId = product.id;
+    wishBtn.innerHTML = heartSVG(state.wishlist.includes(product.id));
+    wishBtn.classList.toggle('active', state.wishlist.includes(product.id));
+    wishBtn.addEventListener('click', () => toggleWishlist(product.id));
+
     const add = document.createElement('button');
     add.className = 'button button-dark';
     add.type = 'button';
@@ -420,7 +465,7 @@ async function detailsFor(id) {
       ui.dialog.close();
     });
 
-    copy.append(eyebrow, heading, description, stock, price, add);
+    copy.append(eyebrow, heading, description, stock, price, wishBtn, add);
     wrap.append(copy);
     ui.dialogContent.append(wrap);
 
@@ -431,8 +476,6 @@ async function detailsFor(id) {
     toast(`Não foi possível carregar os detalhes: ${error.message}`);
   }
 }
-
-/* Carrinho */
 
 function addToCart(id) {
   const product = productById(id);
@@ -573,8 +616,6 @@ function renderCart() {
   }
 }
 
-/* Navegação do carrinho */
-
 function openCart() {
   ui.overlay.hidden = false;
   ui.drawer.classList.add('open');
@@ -592,8 +633,6 @@ function closeCart() {
 
   $('open-cart').focus();
 }
-
-/* Eventos */
 
 let searchTimer;
 
@@ -659,8 +698,6 @@ document.addEventListener('keydown', event => {
     closeCart();
   }
 });
-
-/* Inicialização final */
 
 renderCart();
 init();
